@@ -1,6 +1,6 @@
 (async()=>{
-if(window.__flagsV26)return alert('Consulta em curso');
-window.__flagsV26=true;
+if(window.__flagsV27)return alert('Consulta em curso');
+window.__flagsV27=true;
 
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const txt=e=>(e?.textContent||'').replace(/\s+/g,' ').trim();
@@ -19,15 +19,15 @@ const url=(screen,mode='',village='')=>{
  return u;
 };
 
-document.querySelector('#flagsV26')?.remove();
+document.querySelector('#flagsV27')?.remove();
 
 const panel=document.createElement('div');
-panel.id='flagsV26';
+panel.id='flagsV27';
 panel.style='position:fixed;inset:2%;z-index:999999;background:#f4e4bf;color:#222;padding:12px;overflow:auto;font:13px Arial;border:2px solid #99743a';
 
 panel.innerHTML=`
 <button id="closeFlags" style="float:right">Fechar</button>
-<h2>Bandeiras das aldeias — V26</h2>
+<h2>Bandeiras das aldeias — V27</h2>
 <p id="statusFlags">A carregar aldeias...</p>
 <select id="groupFlags" style="padding:7px;min-width:260px">
 <option value="">Todas as aldeias</option>
@@ -54,7 +54,7 @@ const groups=panel.querySelector('#groupFlags');
 
 panel.querySelector('#closeFlags').onclick=()=>{
  panel.remove();
- window.__flagsV26=false;
+ window.__flagsV27=false;
 };
 
 let sortColumn=-1,ascending=true;
@@ -64,7 +64,6 @@ panel.querySelectorAll('th').forEach((th,i)=>{
  th.onclick=()=>{
   ascending=sortColumn===i?!ascending:true;
   sortColumn=i;
-
   const rows=[...body.rows];
 
   rows.sort((a,b)=>{
@@ -76,13 +75,12 @@ panel.querySelectorAll('th').forEach((th,i)=>{
      y=y.split('/')[0];
     }
 
-    x=Number((x.match(/[\d.,]+/)||['0'])[0]
-     .replace(/\./g,'').replace(',','.'));
+    const num=s=>Number(
+     (s.match(/[\d.,]+/)||['0'])[0]
+     .replace(/\./g,'').replace(',','.')
+    );
 
-    y=Number((y.match(/[\d.,]+/)||['0'])[0]
-     .replace(/\./g,'').replace(',','.'));
-
-    return ascending?x-y:y-x;
+    return ascending?num(x)-num(y):num(y)-num(x);
    }
 
    return ascending
@@ -98,20 +96,20 @@ const villages=new Map();
 
 function findVillage(tr){
  const a=[...tr.querySelectorAll('a[href*="village="]')]
- .find(a=>/\(\d{3}\|\d{3}\)/.test(a.textContent));
+  .find(a=>/\(\d{3}\|\d{3}\)/.test(a.textContent));
 
  if(!a)return null;
 
  const id=new URL(a.href,location.href)
- .searchParams.get('village');
+  .searchParams.get('village');
 
  return id?{id,name:txt(a)}:null;
 }
 
 function findPopulation(tr){
  const matches=[...tr.cells]
- .map(c=>txt(c).match(/^([\d.]+)\s*\/\s*([\d.]+)$/))
- .filter(Boolean);
+  .map(c=>txt(c).match(/^([\d.]+)\s*\/\s*([\d.]+)$/))
+  .filter(Boolean);
 
  const m=matches.find(m=>{
   const a=Number(m[1].replace(/\./g,''));
@@ -126,13 +124,9 @@ function findPopulation(tr){
   :'—';
 }
 
-// Identifica a coluna do Poço de Argila.
 function clayColumn(d){
- const rows=[...d.querySelectorAll('tr')];
-
- for(const tr of rows){
+ for(const tr of d.querySelectorAll('tr')){
   const cells=[...tr.cells];
-
   if(cells.length<4)continue;
 
   const index=cells.findIndex(c=>{
@@ -149,16 +143,13 @@ function clayColumn(d){
 
   if(index>=0)return index;
  }
-
  return -1;
 }
 
-// Extrai um nível válido de uma célula.
 function clayLevel(cell){
  if(!cell)return null;
 
  const t=txt(cell);
-
  const m=t.match(/^(?:nível\s*)?(\d{1,2})$/i);
 
  if(m){
@@ -170,10 +161,7 @@ function clayLevel(cell){
   cell.querySelector('[title]')?.getAttribute('title')||'';
 
  const mt=title.match(/(?:nível|level)\s*(\d{1,2})/i);
-
- if(mt)return mt[1];
-
- return null;
+ return mt?mt[1]:null;
 }
 
 function readRows(d,mode){
@@ -185,16 +173,12 @@ function readRows(d,mode){
 
   if(!villages.has(v.id)){
    villages.set(v.id,{
-    ...v,
-    points:'—',
-    clay:'—',
-    pop:'—'
+    ...v,points:'—',clay:'—',pop:'—'
    });
   }
 
   const item=villages.get(v.id);
   const cells=[...tr.cells];
-
   const index=cells.findIndex(c=>
    c.querySelector('a[href*="village="]')
   );
@@ -202,13 +186,13 @@ function readRows(d,mode){
   if(index<0)continue;
 
   const after=cells.slice(index+1);
-
   const pop=findPopulation(tr);
+
   if(pop!=='—')item.pop=pop;
 
   if(mode==='prod'||mode==='combined'){
    const points=after.map(c=>txt(c))
-   .find(t=>/^\d{1,3}(?:\.\d{3})+$/.test(t));
+    .find(t=>/^\d{1,3}(?:\.\d{3})+$/.test(t));
 
    if(points)item.points=points;
   }
@@ -220,18 +204,15 @@ function readRows(d,mode){
  }
 }
 
-// Consulta alternativa do edifício stone.
 async function readClayVillage(id){
  const d=await doc(url('main','',id));
 
- const selectors=[
+ for(const selector of [
   '#main_buildrow_stone',
   '#buildrow_stone',
   'tr[data-building="stone"]',
   'tr[id*="stone"]'
- ];
-
- for(const selector of selectors){
+ ]){
   const row=d.querySelector(selector);
   if(!row)continue;
 
@@ -240,26 +221,8 @@ async function readClayVillage(id){
   );
 
   const text=txt(levelCell||row);
-
-  let m=text.match(/(?:nível|level)\s*(\d{1,2})/i);
-
-  if(!m){
-   m=text.match(/^\s*(\d{1,2})\s*$/);
-  }
-
-  if(m)return m[1];
- }
-
- // Procura a linha identificada pelo edifício.
- for(const tr of d.querySelectorAll('tr')){
-  const html=tr.outerHTML;
-
-  if(!/main_buildrow_stone|buildrow_stone|data-building=["']stone/i.test(html))
-   continue;
-
-  const text=txt(tr);
-
-  const m=text.match(/(?:nível|level)\s*(\d{1,2})/i);
+  const m=text.match(/(?:nível|level)\s*(\d{1,2})/i)||
+   text.match(/^\s*(\d{1,2})\s*$/);
 
   if(m)return m[1];
  }
@@ -320,7 +283,6 @@ groups.onchange=async()=>{
   u.searchParams.set('page','-1');
 
   const d=await doc(u);
-
   selected=new Set();
 
   for(const tr of d.querySelectorAll('tr')){
@@ -329,39 +291,20 @@ groups.onchange=async()=>{
   }
 
   filter();
-
-  status.textContent=
-   'Grupo selecionado: '+selected.size+' aldeias';
-
+  status.textContent='Grupo selecionado: '+selected.size+' aldeias';
  }catch(e){
   status.textContent='Erro ao consultar grupo: '+e.message;
  }
 };
 
 function getTimer(d){
- const label=[...d.querySelectorAll('body *')]
- .find(e=>
-  e.children.length===0&&
-  /Tempo até que a bandeira pode ser alterada/i.test(txt(e))
+ const text=txt(d.body);
+
+ const m=text.match(
+  /Tempo até que a bandeira pode ser alterada\s*:?\s*(\d{1,3}:\d{2}:\d{2})/i
  );
 
- if(!label)return null;
-
- const candidates=[
-  label.parentElement,
-  label.parentElement?.parentElement,
-  label.nextElementSibling
- ].filter(Boolean);
-
- for(const e of candidates){
-  const s=txt(e);
-
-  const match=s.match(
-   /Tempo até que a bandeira pode ser alterada\s*:?\s*(\d{1,3}:\d{2}:\d{2})/i
-  );
-
-  if(match)return match[1];
- }
+ if(m)return m[1];
 
  const html=d.documentElement.outerHTML;
 
@@ -373,22 +316,18 @@ function getTimer(d){
 }
 
 function flagData(d){
- const text=txt(d.body);
-
  const heading=[...d.querySelectorAll('*')]
- .find(e=>
-  e.children.length===0&&
-  txt(e)==='Bandeira atual'
- );
+  .find(e=>e.children.length===0&&
+   txt(e)==='Bandeira atual');
 
- if(!heading)
-  return {name:'Não identificada',bonus:'—'};
+ if(!heading){
+  return {name:'Por identificar',bonus:'—'};
+ }
 
- let section=heading.closest('table')||heading.parentElement;
- let content=txt(section);
-
- if(content.length>500)
-  content=txt(heading.parentElement);
+ const parent=heading.parentElement;
+ const section=heading.closest('table')||parent;
+ const content=txt(section);
+ const nearby=txt(parent);
 
  const kinds=[
   'Produção de recursos',
@@ -401,34 +340,43 @@ function flagData(d){
  ];
 
  let name=kinds.find(k=>
-  content.toLowerCase().includes(k.toLowerCase())
+  nearby.toLowerCase().includes(k.toLowerCase())
  );
 
  if(!name){
-  const nearby=text.match(/Bandeira atual\s+(.{0,180})/i);
-
-  if(nearby){
-   name=kinds.find(k=>
-    nearby[1].toLowerCase().includes(k.toLowerCase())
-   );
-
-   content=nearby[1];
-  }
+  name=kinds.find(k=>
+   content.toLowerCase().includes(k.toLowerCase())
+  );
  }
 
- const bonus=content.match(
+ if(!name){
+  const remove=[...d.querySelectorAll('a,button,input')]
+   .some(e=>/remover bandeira/i.test(
+    txt(e)+' '+(e.value||'')
+   ));
+
+  if(!remove){
+   return {name:'Sem bandeira',bonus:'—'};
+  }
+
+  return {name:'Por identificar',bonus:'—'};
+ }
+
+ const match=content.match(
   /\d+(?:[,.]\d+)?\s*%[^%]{0,65}/
  );
 
  return {
-  name:name||'Por identificar',
-  bonus:bonus
-   ?bonus[0].split(/Remover bandeira/i)[0].trim()
+  name,
+  bonus:match
+   ?match[0].split(/Remover bandeira/i)[0].trim()
    :'—'
  };
 }
 
 function removalStatus(d,flag){
+ if(flag.name==='Sem bandeira')return 'Sem bandeira';
+
  const timer=getTimer(d);
 
  if(timer){
@@ -440,28 +388,33 @@ function removalStatus(d,flag){
    :'Pode remover';
  }
 
- const text=txt(d.body);
-
- if(flag.name==='Sem bandeira')
-  return 'Sem bandeira';
-
- if(!/Bandeira atual/i.test(text))
-  return 'Sem bandeira';
-
- if(/Bandeira atual\s*(?:Nenhuma|Sem bandeira)/i.test(text))
-  return 'Sem bandeira';
-
  const disabled=[...d.querySelectorAll('button,input,a')]
- .filter(e=>
-  /remover bandeira/i.test(txt(e)+' '+(e.value||''))
- )
- .some(e=>
-  e.disabled||e.classList.contains('disabled')
- );
+  .filter(e=>
+   /remover bandeira/i.test(txt(e)+' '+(e.value||''))
+  )
+  .some(e=>
+   e.disabled||e.classList.contains('disabled')
+  );
 
- if(disabled)return 'Bloqueada';
+ return disabled?'Bloqueada':'Pode remover';
+}
 
- return 'Pode remover';
+async function readPointsVillage(id){
+ const d=await doc(url('main','',id));
+
+ const candidates=[
+  ...d.querySelectorAll(
+   '#menu_row2, #menu_row, #content_value, .village-info'
+  )
+ ];
+
+ for(const e of candidates){
+  const s=txt(e);
+  const m=s.match(/(?:Pontos|Pontuação)\s*:?\s*([\d.]+)/i);
+  if(m)return m[1];
+ }
+
+ return null;
 }
 
 try{
@@ -469,7 +422,6 @@ try{
  base.searchParams.set('page','-1');
 
  const overview=await doc(base);
-
  readRows(overview,'combined');
  addGroups(overview);
 
@@ -477,32 +429,24 @@ try{
   try{
    const u=url('overview_villages',mode);
    u.searchParams.set('page','-1');
-
    readRows(await doc(u),mode);
-
   }catch(e){
    console.warn(mode,e);
   }
  }
 
  const list=[...villages.values()];
-
- status.textContent=
-  'Encontradas '+list.length+' aldeias';
+ status.textContent='Encontradas '+list.length+' aldeias';
 
  for(const v of list){
   const row=body.insertRow();
   row.dataset.village=v.id;
 
   const link=document.createElement('a');
-
   link.href=url('flags','',v.id).href;
   link.target='_blank';
   link.textContent=v.name;
-
-  link.style=
-   'color:blue;text-decoration:underline;font-weight:bold';
-
+  link.style='color:blue;text-decoration:underline;font-weight:bold';
   link.onclick=()=>link.style.color='green';
 
   row.insertCell().appendChild(link);
@@ -512,8 +456,6 @@ try{
   row.insertCell().textContent='A consultar';
   row.insertCell().textContent='—';
   row.insertCell().textContent='A consultar';
-
-  filter();
  }
 
  let count=0;
@@ -531,28 +473,35 @@ try{
    row.cells[4].textContent=flag.name;
    row.cells[5].textContent=flag.bonus;
    row.cells[6].textContent=removalStatus(d,flag);
-
   }catch(e){
    row.cells[6].textContent='Erro de consulta';
   }
 
-  // Corrige apenas aldeias sem nível identificado.
   if(v.clay==='—'){
    try{
     const level=await readClayVillage(v.id);
-
     if(level!==null){
      v.clay=level;
      row.cells[2].textContent=level;
     }
-
    }catch(e){
     console.warn('Argila '+v.id,e);
    }
   }
 
-  count++;
+  if(v.points==='—'){
+   try{
+    const points=await readPointsVillage(v.id);
+    if(points){
+     v.points=points;
+     row.cells[1].textContent=points;
+    }
+   }catch(e){
+    console.warn('Pontuação '+v.id,e);
+   }
+  }
 
+  count++;
   status.textContent=
    'Consultadas '+count+' de '+list.length+' aldeias';
 
@@ -565,8 +514,7 @@ try{
 
 }catch(e){
  status.textContent='Erro: '+e.message;
-
 }finally{
- window.__flagsV26=false;
+ window.__flagsV27=false;
 }
 })();
