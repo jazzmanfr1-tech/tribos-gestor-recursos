@@ -1,9 +1,10 @@
 (async()=>{
-if(window.__flagsV27)return alert('Consulta em curso');
-window.__flagsV27=true;
+if(window.__flagsV28)return alert('Consulta em curso');
+window.__flagsV28=true;
 
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const txt=e=>(e?.textContent||'').replace(/\s+/g,' ').trim();
+const num=s=>Number(String(s||'').replace(/\./g,'').replace(',','.'))||0;
 
 const doc=async u=>{
  const r=await fetch(u,{credentials:'same-origin'});
@@ -19,15 +20,15 @@ const url=(screen,mode='',village='')=>{
  return u;
 };
 
-document.querySelector('#flagsV27')?.remove();
+document.querySelector('#flagsV28')?.remove();
 
 const panel=document.createElement('div');
-panel.id='flagsV27';
+panel.id='flagsV28';
 panel.style='position:fixed;inset:2%;z-index:999999;background:#f4e4bf;color:#222;padding:12px;overflow:auto;font:13px Arial;border:2px solid #99743a';
 
 panel.innerHTML=`
 <button id="closeFlags" style="float:right">Fechar</button>
-<h2>Bandeiras das aldeias — V27</h2>
+<h2>Bandeiras das aldeias — V28</h2>
 <p id="statusFlags">A carregar aldeias...</p>
 <select id="groupFlags" style="padding:7px;min-width:260px">
 <option value="">Todas as aldeias</option>
@@ -54,16 +55,18 @@ const groups=panel.querySelector('#groupFlags');
 
 panel.querySelector('#closeFlags').onclick=()=>{
  panel.remove();
- window.__flagsV27=false;
+ window.__flagsV28=false;
 };
 
 let sortColumn=-1,ascending=true;
 
 panel.querySelectorAll('th').forEach((th,i)=>{
  th.style.cursor='pointer';
+ th.title='Clique para ordenar';
  th.onclick=()=>{
   ascending=sortColumn===i?!ascending:true;
   sortColumn=i;
+
   const rows=[...body.rows];
 
   rows.sort((a,b)=>{
@@ -75,12 +78,10 @@ panel.querySelectorAll('th').forEach((th,i)=>{
      y=y.split('/')[0];
     }
 
-    const num=s=>Number(
-     (s.match(/[\d.,]+/)||['0'])[0]
-     .replace(/\./g,'').replace(',','.')
-    );
+    x=num((x.match(/[\d.,]+/)||['0'])[0]);
+    y=num((y.match(/[\d.,]+/)||['0'])[0]);
 
-    return ascending?num(x)-num(y):num(y)-num(x);
+    return ascending?x-y:y-x;
    }
 
    return ascending
@@ -96,32 +97,28 @@ const villages=new Map();
 
 function findVillage(tr){
  const a=[...tr.querySelectorAll('a[href*="village="]')]
-  .find(a=>/\(\d{3}\|\d{3}\)/.test(a.textContent));
+ .find(a=>/\(\d{3}\|\d{3}\)/.test(a.textContent));
 
  if(!a)return null;
 
  const id=new URL(a.href,location.href)
-  .searchParams.get('village');
+ .searchParams.get('village');
 
  return id?{id,name:txt(a)}:null;
 }
 
 function findPopulation(tr){
  const matches=[...tr.cells]
-  .map(c=>txt(c).match(/^([\d.]+)\s*\/\s*([\d.]+)$/))
-  .filter(Boolean);
+ .map(c=>txt(c).match(/^([\d.]+)\s*\/\s*([\d.]+)$/))
+ .filter(Boolean);
 
  const m=matches.find(m=>{
-  const a=Number(m[1].replace(/\./g,''));
-  const b=Number(m[2].replace(/\./g,''));
+  const a=num(m[1]);
+  const b=num(m[2]);
   return b>=1000&&b>=a;
  });
 
- return m
-  ?Number(m[1].replace(/\./g,'')).toString()+
-   ' / '+
-   Number(m[2].replace(/\./g,'')).toString()
-  :'—';
+ return m?num(m[1])+' / '+num(m[2]):'—';
 }
 
 function clayColumn(d){
@@ -173,12 +170,16 @@ function readRows(d,mode){
 
   if(!villages.has(v.id)){
    villages.set(v.id,{
-    ...v,points:'—',clay:'—',pop:'—'
+    ...v,
+    points:'—',
+    clay:'—',
+    pop:'—'
    });
   }
 
   const item=villages.get(v.id);
   const cells=[...tr.cells];
+
   const index=cells.findIndex(c=>
    c.querySelector('a[href*="village="]')
   );
@@ -192,7 +193,7 @@ function readRows(d,mode){
 
   if(mode==='prod'||mode==='combined'){
    const points=after.map(c=>txt(c))
-    .find(t=>/^\d{1,3}(?:\.\d{3})+$/.test(t));
+   .find(t=>/^\d{1,3}(?:\.\d{3})+$/.test(t));
 
    if(points)item.points=points;
   }
@@ -207,12 +208,14 @@ function readRows(d,mode){
 async function readClayVillage(id){
  const d=await doc(url('main','',id));
 
- for(const selector of [
+ const selectors=[
   '#main_buildrow_stone',
   '#buildrow_stone',
   'tr[data-building="stone"]',
   'tr[id*="stone"]'
- ]){
+ ];
+
+ for(const selector of selectors){
   const row=d.querySelector(selector);
   if(!row)continue;
 
@@ -221,8 +224,9 @@ async function readClayVillage(id){
   );
 
   const text=txt(levelCell||row);
-  const m=text.match(/(?:nível|level)\s*(\d{1,2})/i)||
-   text.match(/^\s*(\d{1,2})\s*$/);
+
+  let m=text.match(/(?:nível|level)\s*(\d{1,2})/i);
+  if(!m)m=text.match(/^\s*(\d{1,2})\s*$/);
 
   if(m)return m[1];
  }
@@ -291,24 +295,38 @@ groups.onchange=async()=>{
   }
 
   filter();
-  status.textContent='Grupo selecionado: '+selected.size+' aldeias';
+  status.textContent=
+   'Grupo selecionado: '+selected.size+' aldeias';
+
  }catch(e){
   status.textContent='Erro ao consultar grupo: '+e.message;
  }
 };
 
 function getTimer(d){
- const text=txt(d.body);
-
- const m=text.match(
-  /Tempo até que a bandeira pode ser alterada\s*:?\s*(\d{1,3}:\d{2}:\d{2})/i
+ const label=[...d.querySelectorAll('body *')]
+ .find(e=>
+  e.children.length===0&&
+  /Tempo até que a bandeira pode ser alterada/i.test(txt(e))
  );
 
- if(m)return m[1];
+ if(!label)return null;
 
- const html=d.documentElement.outerHTML;
+ const candidates=[
+  label.parentElement,
+  label.parentElement?.parentElement,
+  label.nextElementSibling
+ ].filter(Boolean);
 
- const match=html.match(
+ for(const e of candidates){
+  const s=txt(e);
+  const match=s.match(
+   /Tempo até que a bandeira pode ser alterada\s*:?\s*(\d{1,3}:\d{2}:\d{2})/i
+  );
+  if(match)return match[1];
+ }
+
+ const match=d.documentElement.outerHTML.match(
   /Tempo até que a bandeira pode ser alterada[\s\S]{0,500}?(\d{1,3}:\d{2}:\d{2})/i
  );
 
@@ -316,18 +334,22 @@ function getTimer(d){
 }
 
 function flagData(d){
+ const text=txt(d.body);
+
  const heading=[...d.querySelectorAll('*')]
-  .find(e=>e.children.length===0&&
-   txt(e)==='Bandeira atual');
+ .find(e=>
+  e.children.length===0&&
+  txt(e)==='Bandeira atual'
+ );
 
- if(!heading){
-  return {name:'Por identificar',bonus:'—'};
- }
+ if(!heading)
+  return {name:'Sem bandeira',bonus:'—'};
 
- const parent=heading.parentElement;
- const section=heading.closest('table')||parent;
- const content=txt(section);
- const nearby=txt(parent);
+ let section=heading.closest('table')||heading.parentElement;
+ let content=txt(section);
+
+ if(content.length>500)
+  content=txt(heading.parentElement);
 
  const kinds=[
   'Produção de recursos',
@@ -336,47 +358,38 @@ function flagData(d){
   'Força de Defesa',
   'Capacidade da população',
   'Capacidade de carga',
-  'Sorte'
+  'Sorte',
+  'Menores custos de moeda'
  ];
 
  let name=kinds.find(k=>
-  nearby.toLowerCase().includes(k.toLowerCase())
+  content.toLowerCase().includes(k.toLowerCase())
  );
 
  if(!name){
-  name=kinds.find(k=>
-   content.toLowerCase().includes(k.toLowerCase())
-  );
- }
+  const nearby=text.match(/Bandeira atual\s+(.{0,180})/i);
 
- if(!name){
-  const remove=[...d.querySelectorAll('a,button,input')]
-   .some(e=>/remover bandeira/i.test(
-    txt(e)+' '+(e.value||'')
-   ));
-
-  if(!remove){
-   return {name:'Sem bandeira',bonus:'—'};
+  if(nearby){
+   name=kinds.find(k=>
+    nearby[1].toLowerCase().includes(k.toLowerCase())
+   );
+   content=nearby[1];
   }
-
-  return {name:'Por identificar',bonus:'—'};
  }
 
- const match=content.match(
+ const bonus=content.match(
   /\d+(?:[,.]\d+)?\s*%[^%]{0,65}/
  );
 
  return {
-  name,
-  bonus:match
-   ?match[0].split(/Remover bandeira/i)[0].trim()
+  name:name||'Sem bandeira',
+  bonus:bonus
+   ?bonus[0].split(/Remover bandeira/i)[0].trim()
    :'—'
  };
 }
 
 function removalStatus(d,flag){
- if(flag.name==='Sem bandeira')return 'Sem bandeira';
-
  const timer=getTimer(d);
 
  if(timer){
@@ -388,33 +401,25 @@ function removalStatus(d,flag){
    :'Pode remover';
  }
 
+ const text=txt(d.body);
+
+ if(!/Bandeira atual/i.test(text))
+  return 'Sem bandeira';
+
+ if(/Bandeira atual\s*(?:Nenhuma|Sem bandeira)/i.test(text))
+  return 'Sem bandeira';
+
  const disabled=[...d.querySelectorAll('button,input,a')]
-  .filter(e=>
-   /remover bandeira/i.test(txt(e)+' '+(e.value||''))
-  )
-  .some(e=>
-   e.disabled||e.classList.contains('disabled')
-  );
+ .filter(e=>
+  /remover bandeira/i.test(txt(e)+' '+(e.value||''))
+ )
+ .some(e=>
+  e.disabled||e.classList.contains('disabled')
+ );
 
- return disabled?'Bloqueada':'Pode remover';
-}
+ if(disabled)return 'Bloqueada';
 
-async function readPointsVillage(id){
- const d=await doc(url('main','',id));
-
- const candidates=[
-  ...d.querySelectorAll(
-   '#menu_row2, #menu_row, #content_value, .village-info'
-  )
- ];
-
- for(const e of candidates){
-  const s=txt(e);
-  const m=s.match(/(?:Pontos|Pontuação)\s*:?\s*([\d.]+)/i);
-  if(m)return m[1];
- }
-
- return null;
+ return 'Pode remover';
 }
 
 try{
@@ -422,6 +427,7 @@ try{
  base.searchParams.set('page','-1');
 
  const overview=await doc(base);
+
  readRows(overview,'combined');
  addGroups(overview);
 
@@ -436,7 +442,9 @@ try{
  }
 
  const list=[...villages.values()];
- status.textContent='Encontradas '+list.length+' aldeias';
+
+ status.textContent=
+  'Encontradas '+list.length+' aldeias';
 
  for(const v of list){
   const row=body.insertRow();
@@ -445,8 +453,12 @@ try{
   const link=document.createElement('a');
   link.href=url('flags','',v.id).href;
   link.target='_blank';
+  link.rel='noopener noreferrer';
   link.textContent=v.name;
-  link.style='color:blue;text-decoration:underline;font-weight:bold';
+
+  link.style=
+   'color:blue;text-decoration:underline;font-weight:bold';
+
   link.onclick=()=>link.style.color='green';
 
   row.insertCell().appendChild(link);
@@ -456,6 +468,8 @@ try{
   row.insertCell().textContent='A consultar';
   row.insertCell().textContent='—';
   row.insertCell().textContent='A consultar';
+
+  filter();
  }
 
  let count=0;
@@ -473,6 +487,7 @@ try{
    row.cells[4].textContent=flag.name;
    row.cells[5].textContent=flag.bonus;
    row.cells[6].textContent=removalStatus(d,flag);
+
   }catch(e){
    row.cells[6].textContent='Erro de consulta';
   }
@@ -480,6 +495,7 @@ try{
   if(v.clay==='—'){
    try{
     const level=await readClayVillage(v.id);
+
     if(level!==null){
      v.clay=level;
      row.cells[2].textContent=level;
@@ -489,24 +505,13 @@ try{
    }
   }
 
-  if(v.points==='—'){
-   try{
-    const points=await readPointsVillage(v.id);
-    if(points){
-     v.points=points;
-     row.cells[1].textContent=points;
-    }
-   }catch(e){
-    console.warn('Pontuação '+v.id,e);
-   }
-  }
-
   count++;
+
   status.textContent=
    'Consultadas '+count+' de '+list.length+' aldeias';
 
   if(count<list.length)
-   await wait(250+50+Math.floor(Math.random()*101));
+   await wait(250);
  }
 
  status.textContent=
@@ -514,7 +519,8 @@ try{
 
 }catch(e){
  status.textContent='Erro: '+e.message;
+
 }finally{
- window.__flagsV27=false;
+ window.__flagsV28=false;
 }
 })();
