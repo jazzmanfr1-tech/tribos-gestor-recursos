@@ -1,79 +1,341 @@
-(async()=>{if(window.__flagsV24)return alert('Consulta em curso');window.__flagsV24=1;const $=s=>document.querySelector(s),wait=t=>new Promise(r=>setTimeout(r,t)),clean=s=>(s||'').replace(/\s+/g,' ').trim(),esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])),fetchDoc=async u=>{let r=await fetch(u,{credentials:'same-origin'});if(!r.ok)throw Error('HTTP '+r.status);return new DOMParser().parseFromString(await r.text(),'text/html')};let p=document.createElement('div');p.style='position:fixed;inset:2%;z-index:999999;background:#f4e4bf;padding:15px;overflow:auto;color:#222;font:13px Arial;border:2px solid #99743a';p.innerHTML='<button id="f5close" style="float:right">Fechar</button><h2>Bandeiras das aldeias — V24</h2><p id="f5status">A procurar aldeias...</p><select id="f5group" style="padding:7px;min-width:260px"><option value="">Todas as aldeias</option></select><table style="width:100%;border-collapse:collapse;margin-top:10px" border="1" cellpadding="4"><thead><tr><th>Aldeia</th><th>Pontuação</th><th>Poço de Argila</th><th>População</th><th>Bandeira</th><th>Bónus</th><th>Estado</th></tr></thead><tbody id="f5body"></tbody></table>';document.body.append(p);p.querySelector('#f5close').onclick=()=>p.remove();let status=p.querySelector('#f5status'),tb=p.querySelector('#f5body');let sortCol=-1,sortAsc=true;const sortRows=()=>{if(sortCol<0)return;const value=r=>{let t=(r.cells[sortCol]?.textContent||'').trim();if([1,2,3,5].includes(sortCol)){if(sortCol===3)t=t.split('/')[0];let m=t.replace(/\./g,'').replace(',','.').match(/-?\d+(?:\.\d+)?/);return m?Number(m[0]):-1}return t};[...tb.rows].sort((a,b)=>{let x=value(a),y=value(b),c=typeof x==='number'?x-y:String(x).localeCompare(String(y),'pt',{numeric:true,sensitivity:'base'});return sortAsc?c:-c}).forEach(r=>tb.appendChild(r))};p.querySelectorAll('thead th').forEach((th,i)=>{th.style.cursor='pointer';th.title='Clique para ordenar';th.addEventListener('click',()=>{sortAsc=sortCol===i?!sortAsc:true;sortCol=i;sortRows();p.querySelectorAll('thead th').forEach((h,j)=>{h.textContent=h.textContent.replace(/ [▲▼]$/,'')+(j===i?(sortAsc?' ▲':' ▼'):'')})})});let activeGroup=null;const filterGroup=()=>[...tb.rows].forEach(r=>r.style.display=activeGroup===null||activeGroup.has(r.dataset.village)?'':'none');p.querySelector('#f5group').onchange=async e=>{let val=e.target.value;if(!val){activeGroup=null;filterGroup();return}status.textContent='A carregar grupo...';try{let gu=new URL('/game.php',location.origin);gu.searchParams.set('screen','overview_villages');gu.searchParams.set('mode','combined');gu.searchParams.set('group',val);gu.searchParams.set('page','-1');let gd=await fetchDoc(gu);let ids=new Set([...gd.querySelectorAll('tr a[href*="village="]')].filter(a=>/\(\d{3}\|\d{3}\)/.test(a.textContent)).map(a=>new URL(a.href,location.href).searchParams.get('village')));if(!ids.size)throw Error('Grupo vazio ou não disponível');activeGroup=ids;filterGroup();status.textContent='Grupo selecionado: '+ids.size+' aldeias. A consulta continua.'}catch(err){activeGroup=null;filterGroup();status.textContent='Não foi possível carregar o grupo: '+err.message}};try{let here=new URL(location.href),ov=new URL('/game.php',location.origin);ov.searchParams.set('village',here.searchParams.get('village')||'');ov.searchParams.set('screen','overview_villages');ov.searchParams.set('mode','combined');ov.searchParams.set('page','-1');let d=await fetchDoc(ov),map=new Map();const groupSelect=p.querySelector('#f5group');let groupOptions=new Map();for(let doc of [document,d]){for(let opt of doc.querySelectorAll('select option')){let value=opt.value||'',label=clean(opt.textContent);if(/^\d+$/.test(value)&&label&&!/^(todos|all|grupo|selecionar|select)/i.test(label)&&/group|grupo/i.test(opt.closest('select')?.outerHTML.slice(0,350)||''))groupOptions.set(value,label)}for(let a of doc.querySelectorAll('a[href*="group="]')){let id=new URL(a.href,location.href).searchParams.get('group'),label=clean(a.textContent);if(id&&/^\d+$/.test(id)&&label)groupOptions.set(id,label)}}for(let [id,label] of groupOptions){let opt=document.createElement('option');opt.value=id;opt.textContent=label;groupSelect.appendChild(opt)}if(!groupOptions.size){let opt=document.createElement('option');opt.textContent='Grupos não encontrados';opt.disabled=true;groupSelect.appendChild(opt)}for(let tr of d.querySelectorAll('tr')){let a=[...tr.querySelectorAll('a[href*="village="]')].find(a=>/\(\d{3}\|\d{3}\)/.test(a.textContent));if(!a)continue;let id=new URL(a.href,location.href).searchParams.get('village');if(id&&!map.has(id))map.set(id,{id,name:clean(a.textContent),coord:(a.textContent.match(/\(\d{3}\|\d{3}\)/)||[])[0]})}if(!map.size)throw Error('Não encontrei aldeias na vista Combinado.');const readPop=(doc)=>{for(let tr of doc.querySelectorAll('tr')){let a=[...tr.querySelectorAll('a[href*="village="]')].find(a=>/\(\d{3}\|\d{3}\)/.test(a.textContent));if(!a)continue;let id=new URL(a.href,location.href).searchParams.get('village'),v=map.get(id);if(!v)continue;let cells=[...tr.cells],ai=cells.findIndex(c=>c.contains(a));let matches=[];for(let c of cells.slice(ai+1)){let t=clean(c.textContent),m=t.match(/^(\d{1,3}(?:[. ]\d{3})*|\d+)\s*\/\s*(\d{1,3}(?:[. ]\d{3})*|\d+)$/);if(m){let used=Number(m[1].replace(/[. ]/g,'')),max=Number(m[2].replace(/[. ]/g,''));if(max>=used&&max>=100)matches.push({used,max})}}if(matches.length===1)v.pop=matches[0].used+'/'+matches[0].max;else if(matches.length>1){let probable=matches.find(x=>x.max>=1000&&x.max<=50000);if(probable)v.pop=probable.used+'/'+probable.max}}};readPop(d);let prod=new URL(ov.href);prod.searchParams.set('mode','prod');try{let pd=await fetchDoc(prod);for(let tr of pd.querySelectorAll('tr')){let a=[...tr.querySelectorAll('a[href*="village="]')].find(a=>/\(\d{3}\|\d{3}\)/.test(a.textContent));if(!a)continue;let id=new URL(a.href,location.href).searchParams.get('village');let v=map.get(id);if(!v)continue;let cells=[...tr.cells];let idx=cells.findIndex(c=>c.contains(a));let pts=cells.slice(idx+1).map(c=>clean(c.textContent)).find(t=>/^\d{1,3}(?:[. ]\d{3})*$/.test(t));if(pts)v.points=pts;readPop(pd)}}catch(e){console.warn('Pontos indisponíveis:',e)}let buildings=new URL(ov.href);buildings.searchParams.set('mode','buildings');try{let bd=await fetchDoc(buildings);let rows=[...bd.querySelectorAll('tr')];let hdr=rows.find(tr=>[...tr.querySelectorAll('th,td')].some(c=>/stone|argila|clay/i.test([c.innerHTML,c.title,...[...c.querySelectorAll('img')].map(i=>i.src+' '+i.title+' '+i.alt)].join(' ')))&&tr.querySelectorAll('th,td').length>8);let ci=-1;if(hdr){ci=[...hdr.children].findIndex(c=>/stone|argila|clay/i.test([c.innerHTML,c.title,...[...c.querySelectorAll('img')].map(i=>i.src+' '+i.title+' '+i.alt)].join(' ')))}for(let tr of rows){let a=[...tr.querySelectorAll('a[href*="village="]')].find(a=>/\(\d{3}\|\d{3}\)/.test(a.textContent));if(!a)continue;let id=new URL(a.href,location.href).searchParams.get('village'),v=map.get(id);if(!v)continue;let cells=[...tr.cells],ai=cells.findIndex(c=>c.contains(a));let candidates=[];if(ci>=0)candidates.push(ci);let buildingCells=cells.slice(ai+1);if(buildingCells.length>=14)candidates.push(ai+1+11);for(let i of [...new Set(candidates)]){let c=cells[i];if(!c)continue;let val=clean(c.textContent),m=val.match(/^(\d{1,2})$/);if(m){v.clay=m[1];break}}}}catch(e){console.warn('Edifícios indisponíveis:',e)}let list=[...map.values()],done=0;status.textContent='Encontradas '+list.length+' aldeias.';for(let v of list){let row=tb.insertRow();row.dataset.village=v.id;filterGroup();for(let x of [v.name,v.points||'Indisponível','A consultar',(v.pop||'Por identificar').replace(/\s*\/\s*/g,' / '),'A consultar','—','A consultar'])row.insertCell().textContent=x;let link=document.createElement('a');let dest=new URL('/game.php',location.origin);dest.searchParams.set('village',v.id);dest.searchParams.set('screen','flags');link.href=dest.href;link.target='_blank';link.rel='noopener noreferrer';link.textContent=v.name;link.style='color:#0645ad;text-decoration:underline;font-weight:bold';link.addEventListener('click',()=>{link.style.color='green'});row.cells[0].replaceChildren(link);row.cells[2].textContent=v.clay||'Por identificar';try{let url=new URL('/game.php',location.origin);url.searchParams.set('village',v.id);url.searchParams.set('screen','flags');let fd=await fetchDoc(url);let els=[...fd.querySelectorAll('td,th,div,span,strong,b,h3,h4')];let heading=els.filter(e=>clean(e.textContent)==='Bandeira atual').sort((a,b)=>a.querySelectorAll('*').length-b.querySelectorAll('*').length)[0];if(!heading)throw Error('Secção Bandeira atual não encontrada');let section=heading.closest('table')||heading.parentElement;let candidates=[section,section?.parentElement,heading.parentElement?.nextElementSibling].filter(Boolean);let picked='';for(let c of candidates){let t=clean(c.textContent);if(t.length<500&&t.includes('Bandeira atual')&&(/\d+[,.]?\d*\s*%/.test(t)||/Remover bandeira/.test(t))){picked=t;break}}if(!picked){let node=heading;for(let i=0;i<9&&node;i++,node=node.nextElementSibling){let t=clean(node.textContent);if(i>0&&/^(Bandeiras disponíveis|Combinar bandeiras|Inventário)/i.test(t))break;if(t.length<400)picked+=' '+t;if(/Remover bandeira/.test(picked))break}}picked=clean(picked).replace(/^.*?Bandeira atual\s*/,'').split(/Remover bandeira/i)[0].trim();let kind=picked.match(/Produção de recursos|Velocidade de recrutamento|Força de ataque|Força (?:de )?Defesa|Sorte|Capacidade da população|Menores custos de moeda|Capacidade de carga/i);let bonus=picked.match(/\d+(?:[,.]\d+)?\s*%[^\n]{0,100}/);if(bonus)bonus[0]=bonus[0].replace(/\s*(?:Remover bandeira).*$/i,'').trim();let hasRemove=clean(section?.parentElement?.textContent).includes('Remover bandeira');row.cells[4].textContent=kind?kind[0]:hasRemove?'Por identificar':'Sem bandeira / por confirmar';row.cells[5].textContent=bonus?bonus[0]:'—';row.cells[6].textContent=kind?'Identificada':hasRemove?'Rever':'Por confirmar';if(!kind&&hasRemove)row.cells[4].title=picked.slice(0,250)}catch(e){row.cells[4].textContent='Não determinado';row.cells[6].textContent='Erro: '+e.message}done++;status.textContent='Consultadas '+done+' de '+list.length+' aldeias';if(done<list.length)await wait(250+50+Math.floor(Math.random()*101))}status.textContent='Concluído: '+done+' de '+list.length+'. Entradas por confirmar não são classificadas como sem bandeira.'}catch(e){status.textContent='Erro: '+e.message}finally{window.__flagsV24=0}})();
-;(()=>{
-const tabela=document.querySelector('#f5body');
-if(!tabela)return;
+(async()=>{
+if(window.__flagsV25)return alert('Consulta em curso');
+window.__flagsV25=true;
 
-const cabecalho=tabela.closest('table').querySelector('thead tr');
-cabecalho.lastElementChild.textContent='Remoção da bandeira';
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const txt=e=>(e?.textContent||'').replace(/\s+/g,' ').trim();
+const doc=async url=>{
+ const r=await fetch(url,{credentials:'same-origin'});
+ if(!r.ok)throw Error('HTTP '+r.status);
+ return new DOMParser().parseFromString(await r.text(),'text/html');
+};
+const url=(screen,mode='',village='')=>{
+ const u=new URL('/game.php',location.origin);
+ u.searchParams.set('screen',screen);
+ if(mode)u.searchParams.set('mode',mode);
+ if(village)u.searchParams.set('village',village);
+ return u;
+};
 
-const esperar=ms=>new Promise(r=>setTimeout(r,ms));
-const texto=e=>(e?.textContent||'').replace(/\s+/g,' ').trim();
+const old=document.querySelector('#flagsV25');
+if(old)old.remove();
 
-async function consultar(linha){
- const id=linha.dataset.village;
- if(!id)return;
+const panel=document.createElement('div');
+panel.id='flagsV25';
+panel.style='position:fixed;inset:2%;z-index:999999;background:#f4e4bf;color:#222;padding:12px;overflow:auto;font:13px Arial;border:2px solid #99743a';
+panel.innerHTML=`
+<button id="closeFlags" style="float:right">Fechar</button>
+<h2>Bandeiras das aldeias — V25</h2>
+<p id="statusFlags">A carregar aldeias...</p>
+<select id="groupFlags" style="padding:7px;min-width:260px">
+<option value="">Todas as aldeias</option>
+</select>
+<table border="1" cellpadding="4" style="width:100%;border-collapse:collapse;margin-top:10px">
+<thead><tr>
+<th>Aldeia</th>
+<th>Pontuação</th>
+<th>Poço de Argila</th>
+<th>População</th>
+<th>Bandeira</th>
+<th>Bónus</th>
+<th>Estado</th>
+</tr></thead>
+<tbody id="bodyFlags"></tbody>
+</table>`;
+document.body.appendChild(panel);
 
- const celula=linha.cells[linha.cells.length-1];
- celula.textContent='A consultar...';
+const body=panel.querySelector('#bodyFlags');
+const status=panel.querySelector('#statusFlags');
+const groups=panel.querySelector('#groupFlags');
 
- try{
-  const url=new URL('/game.php',location.origin);
-  url.searchParams.set('village',id);
-  url.searchParams.set('screen','flags');
+panel.querySelector('#closeFlags').onclick=()=>{
+ panel.remove();
+ window.__flagsV25=false;
+};
 
-  const resposta=await fetch(url,{credentials:'same-origin'});
-  if(!resposta.ok)throw Error('HTTP '+resposta.status);
+let sortColumn=-1,ascending=true;
 
-  const html=await resposta.text();
-  const doc=new DOMParser().parseFromString(html,'text/html');
+panel.querySelectorAll('th').forEach((th,i)=>{
+ th.style.cursor='pointer';
+ th.onclick=()=>{
+  ascending=sortColumn===i?!ascending:true;
+  sortColumn=i;
+  const rows=[...body.rows];
+  rows.sort((a,b)=>{
+   let x=txt(a.cells[i]),y=txt(b.cells[i]);
+   if([1,2,3,5].includes(i)){
+    if(i===3){x=x.split('/')[0];y=y.split('/')[0]}
+    x=Number((x.match(/[\d.,]+/)||['0'])[0].replace(/\./g,'').replace(',','.'));
+    y=Number((y.match(/[\d.,]+/)||['0'])[0].replace(/\./g,'').replace(',','.'));
+    return ascending?x-y:y-x;
+   }
+   return ascending?x.localeCompare(y,'pt',{numeric:true}):y.localeCompare(x,'pt',{numeric:true});
+  });
+  rows.forEach(r=>body.appendChild(r));
+ };
+});
 
-  const botoes=[...doc.querySelectorAll('a,button,input')];
+const villages=new Map();
 
-  const remover=botoes.find(e=>
-   /remover bandeira|retirar bandeira/i.test(
-    texto(e)+' '+(e.value||'')+' '+(e.title||'')
-   )
-  );
+function findVillage(tr){
+ const a=[...tr.querySelectorAll('a[href*="village="]')]
+ .find(a=>/\(\d{3}\|\d{3}\)/.test(a.textContent));
+ if(!a)return null;
+ const id=new URL(a.href,location.href).searchParams.get('village');
+ return id?{id,name:txt(a)}:null;
+}
 
-  const conteudo=texto(doc.body);
+function findPopulation(tr){
+ const matches=[...tr.cells].map(c=>txt(c).match(/^([\d.]+)\s*\/\s*([\d.]+)$/)).filter(Boolean);
+ const m=matches.find(m=>{
+  const a=Number(m[1].replace(/\./g,''));
+  const b=Number(m[2].replace(/\./g,''));
+  return b>=1000&&b>=a;
+ });
+ return m?Number(m[1].replace(/\./g,'')).toString()+' / '+Number(m[2].replace(/\./g,'')).toString():'—';
+}
 
-  const tempo=conteudo.match(
-   /(?:remover|retirar|alterar)[\s\S]{0,150}?(\d+\s*(?:dias?|horas?|h|minutos?|min|segundos?|s)(?:\s*\d+\s*(?:horas?|h|minutos?|min|segundos?|s))*)/i
-  );
+function readRows(d,mode){
+ for(const tr of d.querySelectorAll('tr')){
+  const v=findVillage(tr);
+  if(!v)continue;
+  if(!villages.has(v.id))villages.set(v.id,{...v,points:'—',clay:'—',pop:'—'});
+  const item=villages.get(v.id);
+  const cells=[...tr.cells];
+  const index=cells.findIndex(c=>c.querySelector('a[href*="village="]'));
+  if(index<0)continue;
+  const after=cells.slice(index+1);
 
-  if(tempo){
-   celula.textContent='Aguardar: '+tempo[1];
-  }else if(remover&&!remover.disabled&&
-   !remover.classList.contains('disabled')&&
-   remover.getAttribute('aria-disabled')!=='true'){
-   celula.textContent='Pode remover';
-  }else if(!/bandeira atual/i.test(conteudo)){
-   celula.textContent='Sem bandeira';
-  }else{
-   celula.textContent='Verificar bloqueio';
+  const pop=findPopulation(tr);
+  if(pop!=='—')item.pop=pop;
+
+  if(mode==='prod'||mode==='combined'){
+   const points=after.map(c=>txt(c)).find(t=>/^\d{1,3}(?:\.\d{3})+$/.test(t));
+   if(points)item.points=points;
   }
 
- }catch(e){
-  celula.textContent='Erro na consulta';
+  if(mode==='buildings'){
+   const header=[...d.querySelectorAll('tr')]
+   .find(r=>[...r.cells].some(c=>/argila|clay|stone/i.test(c.innerHTML))&&r.cells.length>8);
+   if(header){
+    const ci=[...header.cells].findIndex(c=>/argila|clay|stone/i.test(c.innerHTML));
+    const val=txt(cells[ci]);
+    if(/^\d{1,2}$/.test(val))item.clay=val;
+   }
+  }
  }
 }
 
-const processadas=new WeakSet();
-
-const observador=new MutationObserver(()=>{
- for(const linha of tabela.rows){
-  if(!linha.dataset.village||processadas.has(linha))continue;
-  processadas.add(linha);
-  consultar(linha);
+function addGroups(d){
+ const found=new Map();
+ for(const source of [document,d]){
+  for(const select of source.querySelectorAll('select')){
+   if(!/group|grupo/i.test(select.outerHTML.slice(0,350)))continue;
+   for(const opt of select.options){
+    if(/^\d+$/.test(opt.value))found.set(opt.value,txt(opt));
+   }
+  }
+  for(const a of source.querySelectorAll('a[href*="group="]')){
+   const id=new URL(a.href,location.href).searchParams.get('group');
+   if(id&&/^\d+$/.test(id))found.set(id,txt(a));
+  }
  }
-});
-
-observador.observe(tabela,{childList:true,subtree:true});
-
-for(const linha of tabela.rows){
- if(linha.dataset.village&&!processadas.has(linha)){
-  processadas.add(linha);
-  consultar(linha);
+ for(const [id,name] of found){
+  const opt=document.createElement('option');
+  opt.value=id;opt.textContent=name;
+  groups.appendChild(opt);
  }
+}
+
+let selected=null;
+
+function filter(){
+ for(const row of body.rows){
+  row.style.display=!selected||selected.has(row.dataset.village)?'':'none';
+ }
+}
+
+groups.onchange=async()=>{
+ if(!groups.value){selected=null;filter();return}
+ try{
+  const u=url('overview_villages','combined');
+  u.searchParams.set('group',groups.value);
+  u.searchParams.set('page','-1');
+  const d=await doc(u);
+  selected=new Set();
+  for(const tr of d.querySelectorAll('tr')){
+   const v=findVillage(tr);
+   if(v)selected.add(v.id);
+  }
+  filter();
+  status.textContent='Grupo selecionado: '+selected.size+' aldeias';
+ }catch(e){
+  status.textContent='Erro ao consultar grupo: '+e.message;
+ }
+};
+
+function getTimer(d){
+ const label=[...d.querySelectorAll('body *')]
+ .find(e=>e.children.length===0&&/Tempo até que a bandeira pode ser alterada/i.test(txt(e)));
+
+ if(!label)return null;
+
+ const candidates=[
+  label.parentElement,
+  label.parentElement?.parentElement,
+  label.nextElementSibling
+ ].filter(Boolean);
+
+ for(const e of candidates){
+  const s=txt(e);
+  const match=s.match(/Tempo até que a bandeira pode ser alterada\s*:?\s*(\d{1,3}:\d{2}:\d{2})/i);
+  if(match)return match[1];
+ }
+
+ const html=d.documentElement.outerHTML;
+ const match=html.match(/Tempo até que a bandeira pode ser alterada[\s\S]{0,500}?(\d{1,3}:\d{2}:\d{2})/i);
+ return match?match[1]:null;
+}
+
+function flagData(d){
+ const text=txt(d.body);
+ const heading=[...d.querySelectorAll('*')]
+ .find(e=>e.children.length===0&&txt(e)==='Bandeira atual');
+
+ if(!heading)return {name:'Não identificada',bonus:'—'};
+
+ let section=heading.closest('table')||heading.parentElement;
+ let content=txt(section);
+
+ if(content.length>500){
+  content=txt(heading.parentElement);
+ }
+
+ const kinds=[
+  'Produção de recursos',
+  'Velocidade de recrutamento',
+  'Força de ataque',
+  'Força de Defesa',
+  'Capacidade da população',
+  'Capacidade de carga',
+  'Sorte'
+ ];
+
+ let name=kinds.find(k=>content.toLowerCase().includes(k.toLowerCase()));
+
+ if(!name){
+  const nearby=text.match(/Bandeira atual\s+(.{0,180})/i);
+  if(nearby){
+   name=kinds.find(k=>nearby[1].toLowerCase().includes(k.toLowerCase()));
+   content=nearby[1];
+  }
+ }
+
+ const bonus=content.match(/\d+(?:[,.]\d+)?\s*%[^%]{0,65}/);
+
+ return {
+  name:name||'Por identificar',
+  bonus:bonus?bonus[0].split(/Remover bandeira/i)[0].trim():'—'
+ };
+}
+
+function removalStatus(d,flag){
+ const timer=getTimer(d);
+
+ if(timer){
+  const seconds=timer.split(':').reduce((a,b)=>a*60+Number(b),0);
+  return seconds>0?'Aguardar '+timer:'Pode remover';
+ }
+
+ const text=txt(d.body);
+
+ if(flag.name==='Sem bandeira')return 'Sem bandeira';
+
+ if(!/Bandeira atual/i.test(text))return 'Sem bandeira';
+
+ const noFlag=/Bandeira atual\s*(?:Nenhuma|Sem bandeira)/i.test(text);
+ if(noFlag)return 'Sem bandeira';
+
+ const disabled=[...d.querySelectorAll('button,input,a')]
+ .filter(e=>/remover bandeira/i.test(txt(e)+' '+(e.value||'')))
+ .some(e=>e.disabled||e.classList.contains('disabled'));
+
+ if(disabled)return 'Bloqueada';
+
+ return 'Pode remover';
+}
+
+try{
+ const base=url('overview_villages','combined');
+ base.searchParams.set('page','-1');
+ const overview=await doc(base);
+
+ readRows(overview,'combined');
+ addGroups(overview);
+
+ for(const mode of ['prod','buildings']){
+  try{
+   const u=url('overview_villages',mode);
+   u.searchParams.set('page','-1');
+   readRows(await doc(u),mode);
+  }catch(e){console.warn(mode,e)}
+ }
+
+ const list=[...villages.values()];
+ status.textContent='Encontradas '+list.length+' aldeias';
+
+ for(const v of list){
+  const row=body.insertRow();
+  row.dataset.village=v.id;
+
+  const link=document.createElement('a');
+  const destination=url('flags','',v.id);
+  link.href=destination.href;
+  link.target='_blank';
+  link.textContent=v.name;
+  link.style='color:blue;text-decoration:underline;font-weight:bold';
+  link.onclick=()=>link.style.color='green';
+
+  row.insertCell().appendChild(link);
+  row.insertCell().textContent=v.points;
+  row.insertCell().textContent=v.clay;
+  row.insertCell().textContent=v.pop;
+  row.insertCell().textContent='A consultar';
+  row.insertCell().textContent='—';
+  row.insertCell().textContent='A consultar';
+
+  filter();
+ }
+
+ let count=0;
+
+ for(const v of list){
+  const row=[...body.rows].find(r=>r.dataset.village===v.id);
+  if(!row)continue;
+
+  try{
+   const d=await doc(url('flags','',v.id));
+   const flag=flagData(d);
+
+   row.cells[4].textContent=flag.name;
+   row.cells[5].textContent=flag.bonus;
+   row.cells[6].textContent=removalStatus(d,flag);
+
+  }catch(e){
+   row.cells[6].textContent='Erro de consulta';
+  }
+
+  count++;
+  status.textContent='Consultadas '+count+' de '+list.length+' aldeias';
+
+  if(count<list.length)await wait(250+50+Math.floor(Math.random()*101));
+ }
+
+ status.textContent='Concluído: '+count+' de '+list.length+' aldeias';
+
+}catch(e){
+ status.textContent='Erro: '+e.message;
+}finally{
+ window.__flagsV25=false;
 }
 })();
